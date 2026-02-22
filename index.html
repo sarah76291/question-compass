@@ -1262,7 +1262,7 @@ function handleSessionData(response) {
       const perspectiveBy = (cells[9]?.v || '').trim();
       const lens = guessLensFromAgent(perspectiveBy);
       const timestamp = cells[15]?.v || '';
-      const rowKey = `${perspectiveBy}-${timestamp}`;
+      const rowKey = `${rowQuestionId}-${perspectiveBy}`;
 
       if (perspective && !lastKnownResponses.has(rowKey)) {
         lastKnownResponses.add(rowKey);
