@@ -1235,10 +1235,14 @@ function pollSessions() {
 
 function handleSessionData(response) {
   try {
+    const currentSession = _sessionId;
     const rows = response.table.rows;
     rows.forEach(row => {
       const cells = row.c;
       if (!cells || !cells[8]) return; // col I = perspective
+      // Filter by current session's question_id (col A)
+      const rowQuestionId = (cells[0]?.v || '').trim();
+      if (currentSession && rowQuestionId && rowQuestionId !== currentSession) return;
       const perspective = cells[8]?.v || '';
       const perspectiveBy = (cells[9]?.v || '').trim();
       const lens = guessLensFromAgent(perspectiveBy);
@@ -1642,6 +1646,9 @@ function runCompass() {
   lastKnownResponses = new Set();
   traceEvents = [];
   renderTraceEvents();
+  // Generate fresh session ID for this question
+  _sessionId = 'qc3-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+  console.log('✦ New session:', _sessionId);
   state.allRevealed = false;
 
   // Generate reflections (solo lens hints)
