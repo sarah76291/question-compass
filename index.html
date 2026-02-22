@@ -1079,7 +1079,15 @@ function renderLensCards() {
         ${p.holding ? `<div class="presence-holding">${escapeHtml(p.holding)}</div>` : ''}
         <div class="lens-question">${m.q}</div>
         <div class="lens-reflection" id="ref-${l}"></div>
-        <div class="perspectives-list" id="perspectives-${l}"></div>
+        <div class="perspectives-list" id="perspectives-${l}">
+          ${(agentResponses[l] || []).map(r => `
+            <div class="agent-response" style="opacity:1;transform:none;">
+              <div class="ar-agent">${LENS_META[l]?.icon || '◈'} ${escapeHtml(r.agent)}</div>
+              <div class="ar-text">${escapeHtml(r.text)}</div>
+              <div class="ar-time">${r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : 'just now'}</div>
+            </div>
+          `).join('')}
+        </div>
         <div class="blind-input-area" id="blind-${l}">
           <textarea class="blind-textarea" id="blind-text-${l}" placeholder="Your perspective on this lens…"></textarea>
           <div class="blind-submit-row">
@@ -1218,6 +1226,8 @@ function handleInvocationData(response) {
 
 let lastKnownResponses = new Set();
 let traceEvents = [];
+let agentResponses = {}; // lens → [{agent, text, timestamp}]
+LENSES.forEach(l => agentResponses[l] = []);
 
 function pollSessions() {
   gvizFetch(SESSION_SHEET_ID, handleSessionData);
@@ -1254,25 +1264,19 @@ function guessLensFromAgent(name) {
 }
 
 function renderAgentResponse(lens, agent, text, timestamp) {
-  const targetId = lens ? `perspectives-${lens}` : null;
-  const target = targetId ? document.getElementById(targetId) : null;
-  if (!target) return;
-
-  const entry = document.createElement('div');
-  entry.className = 'agent-response';
-  entry.innerHTML = `
-    <div class="ar-agent">${LENS_META[lens]?.icon || '◈'} ${escapeHtml(agent)}</div>
-    <div class="ar-text">${escapeHtml(text)}</div>
-    <div class="ar-time">${timestamp ? new Date(timestamp).toLocaleTimeString() : 'just now'}</div>
-  `;
-  target.appendChild(entry);
-
+  if (!lens || !agentResponses[lens]) return;
+  // Store in persistent state
+  agentResponses[lens].push({ agent, text, timestamp });
+  // Re-render lens cards (which now include responses)
+  renderLensCards();
   // Flash the lens card
-  const card = target.closest('.lens-card');
-  if (card) {
-    card.classList.add('arrival-flash');
-    setTimeout(() => card.classList.remove('arrival-flash'), 1200);
-  }
+  setTimeout(() => {
+    const card = document.querySelector(`.lens-card[data-lens="${lens}"]`);
+    if (card) {
+      card.classList.add('arrival-flash');
+      setTimeout(() => card.classList.remove('arrival-flash'), 1200);
+    }
+  }, 50);
 }
 
 function addTraceEvent(type, agent, description) {
