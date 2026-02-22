@@ -1072,7 +1072,7 @@ function renderLensCards() {
           <span class="presence-dot ${p.status}"></span>
           <span class="presence-name">${m.agent}</span>
           <span class="presence-status" id="presence-status-${l}">${getPresenceLabel(p.status)}</span>
-          <button class="invoke-btn ${!['away','responded','blocked'].includes(p.status) ? 'invited' : ''}" id="invoke-${l}" onclick="event.stopPropagation(); invokeAgent('${l}')" ${['thinking','acknowledged'].includes(p.status) ? 'disabled' : ''}>
+          <button class="invoke-btn ${['invited','acknowledged','thinking'].includes(p.status) ? 'invited' : ''}" id="invoke-${l}" onclick="event.stopPropagation(); invokeAgent('${l}')" ${['invited','thinking','acknowledged'].includes(p.status) ? 'disabled' : ''}>
             ${p.status === 'invited' ? 'Invited…' : p.status === 'thinking' ? 'Thinking…' : p.status === 'acknowledged' ? 'Joining…' : 'Invoke'}
           </button>
         </div>
@@ -1117,7 +1117,8 @@ function getPresenceLabel(status) {
 function invokeAgent(lens) {
   const m = LENS_META[lens];
   const p = agentPresence[m.agentId];
-  if (!['away', 'responded', 'blocked'].includes(p.status)) return; // Allow invoke from away, responded, or blocked
+  // Allow invoke from any non-transitional state (block only during active invite/thinking/joining)
+  if (['invited', 'acknowledged', 'thinking'].includes(p.status)) return;
 
   // Update local state
   p.status = 'invited';
