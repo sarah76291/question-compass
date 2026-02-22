@@ -1072,8 +1072,8 @@ function renderLensCards() {
           <span class="presence-dot ${p.status}"></span>
           <span class="presence-name">${m.agent}</span>
           <span class="presence-status" id="presence-status-${l}">${getPresenceLabel(p.status)}</span>
-          <button class="invoke-btn ${p.status !== 'away' && p.status !== 'responded' ? 'invited' : ''}" id="invoke-${l}" onclick="event.stopPropagation(); invokeAgent('${l}')" ${['thinking','acknowledged'].includes(p.status) ? 'disabled' : ''}>
-            ${p.status === 'away' || p.status === 'responded' ? 'Invoke' : p.status === 'invited' ? 'Invited…' : p.status === 'thinking' ? 'Thinking…' : p.status === 'acknowledged' ? 'Joining…' : '✦'}
+          <button class="invoke-btn ${!['away','responded','blocked'].includes(p.status) ? 'invited' : ''}" id="invoke-${l}" onclick="event.stopPropagation(); invokeAgent('${l}')" ${['thinking','acknowledged'].includes(p.status) ? 'disabled' : ''}>
+            ${p.status === 'invited' ? 'Invited…' : p.status === 'thinking' ? 'Thinking…' : p.status === 'acknowledged' ? 'Joining…' : 'Invoke'}
           </button>
         </div>
         ${p.holding ? `<div class="presence-holding">${escapeHtml(p.holding)}</div>` : ''}
@@ -1117,7 +1117,7 @@ function getPresenceLabel(status) {
 function invokeAgent(lens) {
   const m = LENS_META[lens];
   const p = agentPresence[m.agentId];
-  if (p.status !== 'away' && p.status !== 'responded') return; // Allow re-invoke after response
+  if (!['away', 'responded', 'blocked'].includes(p.status)) return; // Allow invoke from away, responded, or blocked
 
   // Update local state
   p.status = 'invited';
@@ -1635,8 +1635,13 @@ function runCompass() {
 
   document.getElementById('begin-btn').classList.remove('pulse');
 
-  // Reset perspectives
+  // Reset perspectives AND agent responses from previous session
   LENSES.forEach(l => state.perspectives[l] = []);
+  agentResponses = {};
+  LENSES.forEach(l => agentResponses[l] = []);
+  lastKnownResponses = new Set();
+  traceEvents = [];
+  renderTraceEvents();
   state.allRevealed = false;
 
   // Generate reflections (solo lens hints)
