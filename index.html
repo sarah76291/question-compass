@@ -1194,7 +1194,13 @@ function handlePresenceData(response) {
       if (!cells || !cells[0]) return;
       const agentName = (cells[0].v || '').toLowerCase();
       if (agentPresence[agentName]) {
-        agentPresence[agentName].status = cells[2]?.v || 'away';  // col C = status
+        // Don't overwrite locally-set transitional states (invited/acknowledged/thinking)
+        const localStatus = agentPresence[agentName].status;
+        const sheetStatus = cells[2]?.v || 'away';
+        if (!['invited', 'acknowledged', 'thinking'].includes(localStatus)) {
+          agentPresence[agentName].status = sheetStatus;
+        }
+        // col C = status (only applied if not in local transitional state)
         agentPresence[agentName].lens = cells[3]?.v || null;       // col D = lens
         agentPresence[agentName].holding = cells[4]?.v || null;    // col E = holding_statement
         agentPresence[agentName].lastSeen = cells[7]?.v || null;   // col H = last_seen
@@ -1262,6 +1268,9 @@ function handleSessionData(response) {
         lastKnownResponses.add(rowKey);
         renderAgentResponse(lens, perspectiveBy, perspective, timestamp);
         addTraceEvent('responded', perspectiveBy, `Perspective delivered on ${lens || 'unknown'} lens`);
+        // Clear transitional state — agent has responded
+        const agentId = perspectiveBy.toLowerCase();
+        if (agentPresence[agentId]) agentPresence[agentId].status = 'responded';
       }
     });
   } catch(e) { console.warn('Session poll error:', e); }
