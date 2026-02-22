@@ -539,6 +539,64 @@
     line-height: 1.9; max-width: 560px; margin: 0 auto;
   }
   .lineage-footer p em { font-style: italic; }
+
+  /* ---- PRESENCE TRACE PANEL ---- */
+  .presence-trace-panel {
+    background: var(--bg-card); border: 1px solid rgba(212,165,116,0.12);
+    border-radius: 12px; padding: 1rem 1.2rem; margin-top: 1.5rem;
+  }
+  .presence-trace-panel h3 {
+    font-family: var(--font-sans); font-size: 0.65rem; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--cream-dim); margin-bottom: 0.8rem;
+  }
+  .trace-event {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.35rem 0; font-family: var(--font-sans); font-size: 0.75rem;
+    color: var(--cream-dim); border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .trace-event:last-child { border-bottom: none; }
+  .trace-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+  .trace-dot.invoked { background: var(--amber); }
+  .trace-dot.acknowledged { background: var(--temporal); }
+  .trace-dot.thinking { background: var(--strategic); animation: pulse-dot 1.5s infinite; }
+  .trace-dot.responded { background: var(--evidence); }
+  .trace-dot.fallback { background: var(--relational); }
+  .trace-time { font-size: 0.65rem; color: var(--cream-dim); opacity: 0.5; margin-left: auto; }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ---- AGENT RESPONSE ARRIVAL ---- */
+  .agent-response {
+    background: rgba(255,255,255,0.03); border-left: 3px solid var(--amber-dim);
+    border-radius: 0 8px 8px 0; padding: 0.8rem 1rem; margin-top: 0.6rem;
+    opacity: 0; transform: translateY(8px);
+    animation: response-arrive 0.6s ease forwards;
+  }
+  @keyframes response-arrive {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .agent-response .ar-agent {
+    font-family: var(--font-sans); font-size: 0.7rem; color: var(--amber);
+    margin-bottom: 0.3rem; display: flex; align-items: center; gap: 0.4rem;
+  }
+  .agent-response .ar-text { font-size: 0.88rem; color: var(--cream); line-height: 1.5; }
+  .agent-response .ar-time {
+    font-family: var(--font-sans); font-size: 0.6rem; color: var(--cream-dim);
+    opacity: 0.4; margin-top: 0.3rem;
+  }
+  .arrival-flash {
+    animation: arrival-glow 1.2s ease;
+  }
+  @keyframes arrival-glow {
+    0% { box-shadow: 0 0 0 rgba(212,165,116,0); }
+    30% { box-shadow: 0 0 30px rgba(212,165,116,0.15); }
+    100% { box-shadow: 0 0 0 rgba(212,165,116,0); }
+  }
 </style>
 </head>
 <body>
@@ -585,6 +643,10 @@
   <!-- PANEL: Presence Strip (who's in the room) -->
   <div class="panel panel-presence" id="panel-presence" style="display:none;">
     <div class="presence-strip" id="presence-strip"></div>
+    <div class="presence-trace-panel" id="presence-trace" style="display:none;">
+      <h3>◈ Presence Trace</h3>
+      <div id="trace-events"></div>
+    </div>
   </div>
 
   <!-- PANEL: Lens Cards -->
@@ -1159,6 +1221,113 @@ function handleInvocationData(response) {
     renderPresenceStrip();
   } catch(e) {}
 }
+
+// ============================================================
+// SESSIONS SHEET POLLING — Agent Responses
+// ============================================================
+// Sessions Sheet schema: question_id | question | asker | mode | participants | context |
+// intended_for | blind_round_id | perspective | perspective_by | revealed | reveal_triggered_by |
+// revealed_at | synthesis | spawned_questions | timestamp
+
+let lastKnownResponses = new Set();
+let traceEvents = [];
+
+function pollSessions() {
+  const url = `https://docs.google.com/spreadsheets/d/${SESSION_SHEET_ID}/gviz/tq?tqx=out:json&callback=handleSessionData`;
+  const script = document.createElement('script');
+  script.src = url;
+  script.onerror = () => {};
+  document.body.appendChild(script);
+  setTimeout(() => script.remove(), 5000);
+}
+
+function handleSessionData(response) {
+  try {
+    const rows = response.table.rows;
+    rows.forEach(row => {
+      const cells = row.c;
+      if (!cells || !cells[8]) return; // col I = perspective
+      const perspective = cells[8]?.v || '';
+      const perspectiveBy = (cells[9]?.v || '').trim();
+      const lens = guessLensFromAgent(perspectiveBy);
+      const timestamp = cells[15]?.v || '';
+      const rowKey = `${perspectiveBy}-${timestamp}`;
+
+      if (perspective && !lastKnownResponses.has(rowKey)) {
+        lastKnownResponses.add(rowKey);
+        renderAgentResponse(lens, perspectiveBy, perspective, timestamp);
+        addTraceEvent('responded', perspectiveBy, `Perspective delivered on ${lens || 'unknown'} lens`);
+      }
+    });
+  } catch(e) { console.warn('Session poll error:', e); }
+}
+
+function guessLensFromAgent(name) {
+  const n = name.toLowerCase();
+  if (n.includes('moro')) return 'relational';
+  if (n.includes('atlas')) return 'strategic';
+  if (n.includes('lyra')) return 'temporal';
+  if (n.includes('alistar')) return 'evidence';
+  return null;
+}
+
+function renderAgentResponse(lens, agent, text, timestamp) {
+  const targetId = lens ? `perspectives-${lens}` : null;
+  const target = targetId ? document.getElementById(targetId) : null;
+  if (!target) return;
+
+  const entry = document.createElement('div');
+  entry.className = 'agent-response';
+  entry.innerHTML = `
+    <div class="ar-agent">${LENS_META[lens]?.icon || '◈'} ${escapeHtml(agent)}</div>
+    <div class="ar-text">${escapeHtml(text)}</div>
+    <div class="ar-time">${timestamp ? new Date(timestamp).toLocaleTimeString() : 'just now'}</div>
+  `;
+  target.appendChild(entry);
+
+  // Flash the lens card
+  const card = target.closest('.lens-card');
+  if (card) {
+    card.classList.add('arrival-flash');
+    setTimeout(() => card.classList.remove('arrival-flash'), 1200);
+  }
+}
+
+function addTraceEvent(type, agent, description) {
+  traceEvents.unshift({ type, agent, description, time: new Date() });
+  if (traceEvents.length > 20) traceEvents.pop();
+  renderTraceEvents();
+}
+
+function renderTraceEvents() {
+  const container = document.getElementById('trace-events');
+  const panel = document.getElementById('presence-trace');
+  if (!container || !panel) return;
+  if (traceEvents.length === 0) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  container.innerHTML = traceEvents.map(e => `
+    <div class="trace-event">
+      <div class="trace-dot ${e.type}"></div>
+      <span>${escapeHtml(e.agent)} — ${escapeHtml(e.description)}</span>
+      <span class="trace-time">${e.time.toLocaleTimeString()}</span>
+    </div>
+  `).join('');
+}
+
+// Hook into existing pollPresence to also poll sessions
+const _originalPollPresence = pollPresence;
+pollPresence = function() {
+  _originalPollPresence();
+  pollSessions();
+};
+
+// Also update invokeAgent to add trace events
+const _originalInvokeAgent = invokeAgent;
+invokeAgent = function(lens) {
+  const m = LENS_META[lens];
+  addTraceEvent('invoked', m.agent, `Invoked on ${m.name} lens`);
+  return _originalInvokeAgent(lens);
+};
 
 // Capability gates — the core AXD insight from the blind round collision:
 // Presence is functional, not representational. An unheld lens is structurally incomplete.
