@@ -1165,21 +1165,8 @@ function invokeAgent(lens) {
 
 // Poll presence from dedicated Presence Sheet
 function pollPresence() {
-  // Presence Sheet: agent_name | agent_icon | status | lens | holding_statement | session_id | question_id | last_seen | updated_by
-  const url = `https://docs.google.com/spreadsheets/d/${PRESENCE_SHEET_ID}/gviz/tq?tqx=out:json&callback=handlePresenceData`;
-  const script = document.createElement('script');
-  script.src = url;
-  script.onerror = () => {};
-  document.body.appendChild(script);
-  setTimeout(() => script.remove(), 5000);
-
-  // Also poll invocations
-  const url2 = `https://docs.google.com/spreadsheets/d/${INVOCATIONS_SHEET_ID}/gviz/tq?tqx=out:json&callback=handleInvocationData`;
-  const script2 = document.createElement('script');
-  script2.src = url2;
-  script2.onerror = () => {};
-  document.body.appendChild(script2);
-  setTimeout(() => script2.remove(), 5000);
+  gvizFetch(PRESENCE_SHEET_ID, handlePresenceData);
+  gvizFetch(INVOCATIONS_SHEET_ID, handleInvocationData);
 }
 
 function handlePresenceData(response) {
@@ -1233,12 +1220,7 @@ let lastKnownResponses = new Set();
 let traceEvents = [];
 
 function pollSessions() {
-  const url = `https://docs.google.com/spreadsheets/d/${SESSION_SHEET_ID}/gviz/tq?tqx=out:json&callback=handleSessionData`;
-  const script = document.createElement('script');
-  script.src = url;
-  script.onerror = () => {};
-  document.body.appendChild(script);
-  setTimeout(() => script.remove(), 5000);
+  gvizFetch(SESSION_SHEET_ID, handleSessionData);
 }
 
 function handleSessionData(response) {
@@ -1791,10 +1773,7 @@ function showVillageConnections(input) {
 let liveQuestionsLoaded = false;
 
 function loadFromSheet() {
-  const script = document.createElement('script');
-  script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&tq=SELECT%20*&callback=handleSheetData`;
-  script.onerror = () => loadFromCache();
-  document.head.appendChild(script);
+  gvizFetch(SHEET_ID, handleSheetData);
   setTimeout(() => { if (!liveQuestionsLoaded) loadFromCache(); }, 5000);
 }
 
@@ -1838,7 +1817,30 @@ function handleSheetData(response) {
 window.google = window.google || {};
 window.google.visualization = window.google.visualization || {};
 window.google.visualization.Query = window.google.visualization.Query || {};
-window.google.visualization.Query.setResponse = handleSheetData;
+
+// Route gviz responses to correct handler using reqId
+let _gvizHandlerMap = {};
+let _gvizReqCounter = 0;
+function gvizFetch(sheetId, handler) {
+  const reqId = _gvizReqCounter++;
+  _gvizHandlerMap[reqId] = handler;
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;reqId:${reqId}`;
+  const script = document.createElement('script');
+  script.src = url;
+  script.onerror = () => { delete _gvizHandlerMap[reqId]; };
+  document.body.appendChild(script);
+  setTimeout(() => script.remove(), 5000);
+}
+window.google.visualization.Query.setResponse = function(response) {
+  const reqId = parseInt(response.reqId, 10);
+  const handler = _gvizHandlerMap[reqId];
+  if (handler) {
+    delete _gvizHandlerMap[reqId];
+    handler(response);
+  } else {
+    handleSheetData(response); // default fallback
+  }
+};
 
 function loadFromCache() {
   const cached = localStorage.getItem('compass-sheet-cache');
