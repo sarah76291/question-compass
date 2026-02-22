@@ -1118,12 +1118,18 @@ function invokeAgent(lens) {
   const m = LENS_META[lens];
   const p = agentPresence[m.agentId];
   // Allow invoke from any non-transitional state (block only during active invite/thinking/joining)
-  if (['invited', 'acknowledged', 'thinking'].includes(p.status)) return;
+  if (['invited', 'acknowledged', 'thinking'].includes(p.status)) {
+    console.log(`⊘ Invoke blocked: ${m.agent} status is '${p.status}'`);
+    return;
+  }
+  console.log(`✦ Invoking ${m.agent} on ${lens} (status was '${p.status}')`);
 
   // Update local state
   p.status = 'invited';
 
+  const invocationId = crypto.randomUUID ? crypto.randomUUID() : `inv-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
   const invocation = {
+    invocation_id: invocationId,
     target_agent: m.agent,
     invoked_by: state.participants[0]?.name || 'anonymous',
     lens: lens,
@@ -1135,6 +1141,7 @@ function invokeAgent(lens) {
 
   // Write to Invocations Sheet via GIS (live write path)
   const row = [
+    invocation.invocation_id,
     invocation.target_agent,
     invocation.invoked_by,
     invocation.lens,
@@ -1143,7 +1150,8 @@ function invokeAgent(lens) {
     invocation.status,
     invocation.timestamp
   ];
-  writeToSheet(INVOCATIONS_SHEET_ID, 'Sheet1!A:G', [row])
+  console.log('✦ Writing invocation row:', JSON.stringify(row));
+  writeToSheet(INVOCATIONS_SHEET_ID, 'Sheet1!A:H', [row])
     .then(() => {
       console.log(`✦ Invocation written to Sheet: ${m.agent} on ${lens}`);
       // Show live confirmation
