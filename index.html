@@ -1072,8 +1072,8 @@ function renderLensCards() {
           <span class="presence-dot ${p.status}"></span>
           <span class="presence-name">${m.agent}</span>
           <span class="presence-status" id="presence-status-${l}">${getPresenceLabel(p.status)}</span>
-          <button class="invoke-btn ${p.status !== 'away' ? 'invited' : ''}" id="invoke-${l}" onclick="event.stopPropagation(); invokeAgent('${l}')">
-            ${p.status === 'away' ? 'Invoke' : p.status === 'invited' ? 'Invited…' : ''}
+          <button class="invoke-btn ${p.status !== 'away' && p.status !== 'responded' ? 'invited' : ''}" id="invoke-${l}" onclick="event.stopPropagation(); invokeAgent('${l}')" ${['thinking','acknowledged'].includes(p.status) ? 'disabled' : ''}>
+            ${p.status === 'away' || p.status === 'responded' ? 'Invoke' : p.status === 'invited' ? 'Invited…' : p.status === 'thinking' ? 'Thinking…' : p.status === 'acknowledged' ? 'Joining…' : '✦'}
           </button>
         </div>
         ${p.holding ? `<div class="presence-holding">${escapeHtml(p.holding)}</div>` : ''}
@@ -1117,7 +1117,7 @@ function getPresenceLabel(status) {
 function invokeAgent(lens) {
   const m = LENS_META[lens];
   const p = agentPresence[m.agentId];
-  if (p.status !== 'away') return; // Already invited or present
+  if (p.status !== 'away' && p.status !== 'responded') return; // Allow re-invoke after response
 
   // Update local state
   p.status = 'invited';
